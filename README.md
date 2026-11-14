@@ -39,11 +39,11 @@ Hasil build muncul di `GCS/src-tauri/target/release/bundle/`.
 
 ## Dokumentasi
 
-| Dokumen | Isi |
-|---|---|
-| [docs/README.md](docs/README.md) | Daftar dokumen yang tersedia |
-| [docs/installation-gcs.md](docs/installation-gcs.md) | Prasyarat dan langkah instalasi GCS di Linux, Windows, macOS |
-| [docs/installation-hardware.md](docs/installation-hardware.md) | Rencana dokumentasi hardware, masih TODO |
+| Dokumen                                                        | Isi                                                          |
+| -------------------------------------------------------------- | ------------------------------------------------------------ |
+| [docs/README.md](docs/README.md)                               | Daftar dokumen yang tersedia                                 |
+| [docs/installation-gcs.md](docs/installation-gcs.md)           | Prasyarat dan langkah instalasi GCS di Linux, Windows, macOS |
+| [docs/installation-hardware.md](docs/installation-hardware.md) | Rencana dokumentasi hardware, masih TODO                     |
 
 ## Stack GCS
 
@@ -51,17 +51,19 @@ Bagian frontend pakai React 19 dengan TypeScript, di-bundle Vite 8. Bagian deskt
 
 ## Kontributor
 
-Evan Gamart Anugrah Siadari
-Rasyid Pasha Muhamad
-Vincenlee Jonathans
-Fitra Adin Auliansyah
-Zidan Fabiana
-Muhammad Farrel Balapradhana
-Muhammad Farhan Wikan Syah Alam
-Donny Zaki Huda
-Riyan Ramadhan Elfatih
-Haidar Bahzi
-Abdillah Kamal Azizy
-Muhammad Ahsan Al Asyari
-Victoria Nadine Wiyono
-Ghoziyah Alimah S
+<ul>
+    <li>Evan Gamart Anugrah Siadari</li>
+    <li>Rasyid Pasha Muhamad</li>
+    <li>Vincenlee Jonathans</li>
+    <li>Fitra Adin Auliansyah</li>
+    <li>Zidan Fabiana</li>
+    <li>Muhammad Farrel Balapradhana</li>
+    <li>Muhammad Farhan Wikan Syah Alam</li>
+    <li>Donny Zaki Huda</li>
+    <li>Riyan Ramadhan Elfatih</li>
+    <li>Haidar Bahzi</li>
+    <li>Abdillah Kamal Azizy</li>
+    <li>Muhammad Ahsan Al Asyari</li>
+    <li>Victoria Nadine Wiyono</li>
+    <li>Ghoziyah Alimah S</li>
+</ul>
