@@ -21,6 +21,14 @@
 #define E22_M1_PIN 19
 #define E22_AUX_PIN 23
 
+// LED pin configuration
+#define MPU_INDICATOR_PIN 5
+#define BMP_INDICATOR_PIN 4
+#define LORA_INDICATOR_PIN 15
+#define TRANSMISSION_INDICATOR_PIN 2
+
+#define IGNITER_PIN 26
+
 // LoRa configuration (must match the receiver)
 #define LORA_CHANNEL 0x19
 #define LORA_AIR_RATE 0x62
@@ -29,6 +37,7 @@
 // Timing configuration
 #define SERIAL_BAUDRATE 115200
 #define TRANSMIT_INTERVAL 1000
+#define SENSOR_READ_INTERVAL 100
 
 // Global objects
 extern MPU6050 imu;
@@ -48,5 +57,7 @@ void initializeSensors();
 void readSensorData();
 void initializeLoRa();
 void transmitSensorData();
+void transformIMU(sensors_event_t &accel, sensors_event_t &gyro);
+void readSensorDataAccumulated();
 
 #endif

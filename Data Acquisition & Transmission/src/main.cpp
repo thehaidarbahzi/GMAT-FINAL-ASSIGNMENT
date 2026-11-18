@@ -20,7 +20,10 @@ BMP280Data baroData = {};
 
 // Timing
 unsigned long previousMillis = 0;
-unsigned long id = 0;
+unsigned long packetID = 0;
+uint32_t readCount = 0;
+uint32_t samplePerBatch = TRANSMIT_INTERVAL / SENSOR_READ_INTERVAL;
+boolean blinkState = true;
 
 // Initialize serial communication
 void initializeSerial() {
@@ -36,16 +39,39 @@ void initializeSensors() {
 
     Serial.println("Initializing sensors");
 
+    digitalWrite(MPU_INDICATOR_PIN, HIGH);
+    delay(1000);
+    digitalWrite(MPU_INDICATOR_PIN, LOW);
+    delay(750);
     if (imu.begin(&Wire)) {
         Serial.println("MPU6050: OK");
+        digitalWrite(MPU_INDICATOR_PIN, HIGH);
     } else {
         Serial.println("MPU6050: FAILED");
+        while (true) {
+            digitalWrite(MPU_INDICATOR_PIN, HIGH);
+            delay(500);
+            digitalWrite(MPU_INDICATOR_PIN, LOW);
+            delay(500);
+        }
     }
 
+    delay(1000);
+    digitalWrite(BMP_INDICATOR_PIN, HIGH);
+    delay(1000);
+    digitalWrite(BMP_INDICATOR_PIN, LOW);
+    delay(750);
     if (baro.begin(&Wire)) {
         Serial.println("BMP280: OK");
+        digitalWrite(BMP_INDICATOR_PIN, HIGH);
     } else {
         Serial.println("BMP280: FAILED");
+        while (true) {
+            digitalWrite(BMP_INDICATOR_PIN, HIGH);
+            delay(500);
+            digitalWrite(BMP_INDICATOR_PIN, LOW);
+            delay(500);
+        }
     }
 
 }
@@ -57,19 +83,8 @@ void readSensorData() {
         imu.getEvent(&accel, &gyro, &temp);
     }
 
-    // coordinate transformation due to module placement
-    // MPU6050 mounting rotation: -90 degrees around X-axis
-
-    // Accelerometer
-    float temp_axis;
-    temp_axis = accel.acceleration.y;
-    accel.acceleration.y = -accel.acceleration.z;
-    accel.acceleration.z = temp_axis;
-    // Gyroscope
-    temp_axis = gyro.gyro.y;
-    gyro.gyro.y = -gyro.gyro.z;
-    gyro.gyro.z = temp_axis;
-
+    // Transform sensor coordinate frame to mount coordinate frame
+    transformIMU(accel, gyro);
 
     // Read BMP280
     if (baro.isInitialized()) {
@@ -81,6 +96,11 @@ void readSensorData() {
 void initializeLoRa() {
     Serial.println("Initializing LoRa");
 
+    digitalWrite(LORA_INDICATOR_PIN, HIGH);
+    delay(1000);
+    digitalWrite(LORA_INDICATOR_PIN, LOW);
+    delay(750);
+
     E22Config config;
     config.channel = LORA_CHANNEL;
     config.airRate = LORA_AIR_RATE;
@@ -88,10 +108,57 @@ void initializeLoRa() {
 
     if (lora.begin(9600, config)) {
         Serial.println("LoRa: OK");
+        digitalWrite(LORA_INDICATOR_PIN, HIGH);
     } else {
         Serial.print("LoRa: FAILED (");
         Serial.print(lora.lastError());
         Serial.println(")");
+        while (true) {
+            digitalWrite(LORA_INDICATOR_PIN, HIGH);
+            delay(500);
+            digitalWrite(LORA_INDICATOR_PIN, LOW);
+            delay(500);
+        }
+    }
+}
+
+void readSensorDataAccumulated() {
+    sensors_event_t sampleAccel = {};
+    sensors_event_t sampleGyro = {};
+    sensors_event_t sampleTemperature = {};
+
+    if (imu.isInitialized()) {
+        imu.getEvent(
+            &sampleAccel,
+            &sampleGyro,
+            &sampleTemperature
+        );
+
+        // Transform latest sample
+        transformIMU(sampleAccel, sampleGyro);
+
+        // Accumulate accelerometer
+        accel.acceleration.x += sampleAccel.acceleration.x;
+        accel.acceleration.y += sampleAccel.acceleration.y;
+        accel.acceleration.z += sampleAccel.acceleration.z;
+
+        // Accumulate gyroscope
+        gyro.gyro.x += sampleGyro.gyro.x;
+        gyro.gyro.y += sampleGyro.gyro.y;
+        gyro.gyro.z += sampleGyro.gyro.z;
+
+        // Accumulate temperature
+        temp.temperature += sampleTemperature.temperature;
+    }
+
+    BMP280Data sampleBaroData = {};
+
+    if (baro.isInitialized()) {
+        baro.readData(&sampleBaroData);
+
+        baroData.temperature += sampleBaroData.temperature;
+        baroData.pressure += sampleBaroData.pressure;
+        baroData.altitude += sampleBaroData.altitude;
     }
 }
 
@@ -106,7 +173,7 @@ void transmitSensorData() {
     // Construct payload
     String payload = "";
 
-    payload += String(id);
+    payload += String(packetID);
     payload += ",";
     payload += String(millis());
     payload += ",";
@@ -134,27 +201,125 @@ void transmitSensorData() {
     if (lora.send(buildPacket(payload))) {
         Serial.print("LoRa: Data sent ");
         Serial.println(payload);
-        id++;
     } else {
         Serial.println("LoRa: Transmission failed");
     }
 }
 
+// Coordinate transformation due to module placement
+void transformIMU(sensors_event_t &accel,sensors_event_t &gyro) {
+    float temp_axis;
+
+    // Accelerometer
+    temp_axis = accel.acceleration.y;
+    accel.acceleration.y = -accel.acceleration.z;
+    accel.acceleration.z = temp_axis;
+
+    // Gyroscope
+    temp_axis = gyro.gyro.y;
+    gyro.gyro.y = -gyro.gyro.z;
+    gyro.gyro.z = temp_axis;
+}
+
+void printSensorData() {
+    String data = "";
+    data += String(packetID);
+    data += ",";
+    data += String(millis());
+    data += ",";
+    data += String(accel.acceleration.x, 3);
+    data += ",";
+    data += String(accel.acceleration.y, 3);
+    data += ",";
+    data += String(accel.acceleration.z, 3);
+    data += ",";
+    data += String(gyro.gyro.x, 3);
+    data += ",";
+    data += String(gyro.gyro.y, 3);
+    data += ",";
+    data += String(gyro.gyro.z, 3);
+    data += ",";
+    data += String(temp.temperature, 3);
+    data += ",";
+    data += String(baroData.temperature, 3);
+    data += ",";
+    data += String(baroData.pressure, 3);
+    data += ",";
+    data += String(baroData.altitude, 3);
+
+    Serial.println(data);
+
+    digitalWrite(TRANSMISSION_INDICATOR_PIN, !blinkState);
+    blinkState = !blinkState;
+}
+
+void resetAccumulator() {
+    accel = {};
+    gyro = {};
+    temp = {};
+    baroData = {};
+
+    readCount = 0;
+}
+
+void calculateAverage() {
+    float divisor = (float)readCount;
+
+    accel.acceleration.x /= divisor;
+    accel.acceleration.y /= divisor;
+    accel.acceleration.z /= divisor;
+
+    gyro.gyro.x /= divisor;
+    gyro.gyro.y /= divisor;
+    gyro.gyro.z /= divisor;
+
+    temp.temperature /= divisor;
+
+    baroData.temperature /= divisor;
+    baroData.pressure /= divisor;
+    baroData.altitude /= divisor;
+}
+
 // Setup
 void setup() {
+    pinMode(MPU_INDICATOR_PIN, OUTPUT);
+    pinMode(BMP_INDICATOR_PIN, OUTPUT);
+    pinMode(LORA_INDICATOR_PIN, OUTPUT);
+    pinMode(TRANSMISSION_INDICATOR_PIN, OUTPUT);
+
     initializeSerial();
     initializeSensors();
-    initializeLoRa();
+    // initializeLoRa();
 }
 
 // Main loop
 void loop() {
     unsigned long currentMillis = millis();
 
-    if (currentMillis - previousMillis >= TRANSMIT_INTERVAL) {
+    if (currentMillis - previousMillis >= SENSOR_READ_INTERVAL) {
         previousMillis = currentMillis;
 
-        readSensorData();
-        transmitSensorData();
+        // Acquire sensor data
+        readSensorDataAccumulated();
+
+        // Count samples
+        readCount++;
+
+        // Check transmission interval
+        if (readCount >= samplePerBatch) {
+
+            // Calculate average
+            calculateAverage();
+
+            // Print averaged data
+            printSensorData();
+            // transmitSensorData();
+
+            // Increment batch ID
+            packetID++;
+
+            // Reset accumulator
+            resetAccumulator();
+        }
     }
 }
