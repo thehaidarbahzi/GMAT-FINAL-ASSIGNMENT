@@ -41,17 +41,6 @@ void initializeSensors() {
     }
 }
 
-// Initialize LoRa
-void initializeLoRa() {
-    Serial.println("Initializing LoRa");
-
-    if (lora.begin(9600)) {
-        Serial.println("LoRa: OK");
-    } else {
-        Serial.println("LoRa: FAILED");
-    }
-}
-
 // Read sensor data
 void readSensorData() {
     if (imu.isInitialized()) {
@@ -59,27 +48,32 @@ void readSensorData() {
     }
 }
 
-// Print sensor data
-void printSensorData() {
-    Serial.print(id);
-    Serial.print(",");
-    Serial.print(millis());
-    Serial.print(",");
-    Serial.print(accel.acceleration.x);
-    Serial.print(",");
-    Serial.print(accel.acceleration.y);
-    Serial.print(",");
-    Serial.print(accel.acceleration.z);
-    Serial.print(",");
-    Serial.print(gyro.gyro.x);
-    Serial.print(",");
-    Serial.print(gyro.gyro.y);
-    Serial.print(",");
-    Serial.println(gyro.gyro.z);
+// Initialize LoRa
+void initializeLoRa() {
+    Serial.println("Initializing LoRa");
+
+    E22Config config;
+    config.channel = LORA_CHANNEL;
+    config.airRate = LORA_AIR_RATE;
+    config.txPower = LORA_TX_POWER;
+
+    if (lora.begin(9600, config)) {
+        Serial.println("LoRa: OK");
+    } else {
+        Serial.print("LoRa: FAILED (");
+        Serial.print(lora.lastError());
+        Serial.println(")");
+    }
 }
 
 // Transmit sensor data
 void transmitSensorData() {
+    // Skip if the module is still sending the previous packet
+    if (!lora.isReady()) {
+        Serial.println("LoRa: Module busy");
+        return;
+    }
+
     // Construct payload
     String payload = "";
 
@@ -99,19 +93,11 @@ void transmitSensorData() {
     payload += ",";
     payload += String(gyro.gyro.z, 3);
 
-    // Construct Fixed Transmission packet
-    String packet;
-
-    packet += (char)TARGET_ADDH;
-    packet += (char)TARGET_ADDL;
-    packet += (char)TARGET_CHANNEL;
-
-    packet += payload;
-    packet += "\n";
-
     // Send packet
-    if (lora.send(packet)) {
-        Serial.println("LoRa: Data sent");
+    if (lora.send(buildPacket(payload))) {
+        Serial.print("LoRa: Data sent ");
+        Serial.println(payload);
+        id++;
     } else {
         Serial.println("LoRa: Transmission failed");
     }
@@ -128,15 +114,10 @@ void setup() {
 void loop() {
     unsigned long currentMillis = millis();
 
-    if (currentMillis - previousMillis >= SENSOR_INTERVAL) {
+    if (currentMillis - previousMillis >= TRANSMIT_INTERVAL) {
         previousMillis = currentMillis;
 
         readSensorData();
-
-        printSensorData();
-
         transmitSensorData();
-
-        id++;
     }
 }

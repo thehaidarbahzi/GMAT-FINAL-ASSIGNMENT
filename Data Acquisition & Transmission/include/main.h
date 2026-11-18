@@ -5,8 +5,9 @@
 #include <Wire.h>
 
 // Custom libraries
-#include "MPU6050.h"
-#include "E22.h"
+#include "mpu6050.h"
+#include "e22.h"
+#include "protocol.h"
 
 // MPU6050 Pin configuration
 #define SDA_PIN 21
@@ -19,14 +20,14 @@
 #define E22_M1_PIN 19
 #define E22_AUX_PIN 23
 
-// Header payload 
-#define TARGET_ADDH 0xFF
-#define TARGET_ADDL 0xFF
-#define TARGET_CHANNEL 0x19
+// LoRa configuration (must match the receiver)
+#define LORA_CHANNEL 0x19
+#define LORA_AIR_RATE 0x62
+#define LORA_TX_POWER 0x03
 
 // Timing configuration
 #define SERIAL_BAUDRATE 115200
-#define SENSOR_INTERVAL 100
+#define TRANSMIT_INTERVAL 1000
 
 // Global objects
 extern MPU6050 imu;
@@ -44,7 +45,6 @@ void loop();
 void initializeSerial();
 void initializeSensors();
 void readSensorData();
-void printSensorData();
 void initializeLoRa();
 void transmitSensorData();
 
