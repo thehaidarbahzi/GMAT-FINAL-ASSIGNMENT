@@ -113,7 +113,6 @@ void processPacket(const uint8_t *data, size_t length) {
 
     if (!parsePacket(packet, body)) {
         badCount++;
-        Serial.println("Received: Checksum error");
         return;
     }
 
@@ -122,44 +121,27 @@ void processPacket(const uint8_t *data, size_t length) {
 
     if (hasLastId && id > lastId + 1) {
         lostCount += id - lastId - 1;
-
-        Serial.print("Lost packets: ");
-        Serial.println(id - lastId - 1);
     }
 
     lastId = id;
     hasLastId = true;
     receivedCount++;
 
-    Serial.print("Received: ");
     Serial.print(body);
+    Serial.print(",");
+    Serial.print(receivedCount);
+    Serial.print(",");
+    Serial.print(badCount);
+    Serial.print(",");
+    Serial.print(lostCount);
+    Serial.print(",");
+    Serial.print(receivedCount + lostCount);
 
     int rssi;
 
     if (E22::rssiToDbm(rssiRaw, rssi)) {
         Serial.print(",");
         Serial.print(rssi);
-        Serial.println(" dBm");
-    } else {
-        Serial.println();
     }
-
-    if (receivedCount % SUMMARY_INTERVAL == 0) {
-        printSummary();
-    }
-}
-
-// Print packet statistics
-void printSummary() {
-    unsigned long expected = receivedCount + lostCount;
-
-    Serial.print("Summary: received=");
-    Serial.print(receivedCount);
-    Serial.print(" lost=");
-    Serial.print(lostCount);
-    Serial.print(" bad=");
-    Serial.print(badCount);
-    Serial.print(" success=");
-    Serial.print(100.0 * receivedCount / expected, 1);
-    Serial.println("%");
+    Serial.println();
 }
