@@ -144,7 +144,7 @@ void transmitSensorData() {
 void setup() {
     initializeSerial();
     initializeSensors();
-    // initializeLoRa();
+    initializeLoRa();
 }
 
 // Main loop
@@ -155,29 +155,6 @@ void loop() {
         previousMillis = currentMillis;
 
         readSensorData();
-        // transmitSensorData();
-        Serial.print(id++);
-    Serial.print(",");
-    Serial.print(millis());
-    Serial.print(",");
-    Serial.print(accel.acceleration.x);
-    Serial.print(",");
-    Serial.print(accel.acceleration.y);
-    Serial.print(",");
-    Serial.print(accel.acceleration.z);
-    Serial.print(",");
-    Serial.print(gyro.gyro.x);
-    Serial.print(",");
-    Serial.print(gyro.gyro.y);
-    Serial.print(",");
-    Serial.print(gyro.gyro.z);
-    Serial.print(",");
-    Serial.print(temp.temperature);
-    Serial.print(",");
-    Serial.print(baroData.temperature);
-    Serial.print(",");
-    Serial.print(baroData.pressure);
-    Serial.print(",");
-    Serial.println(baroData.altitude);
+        transmitSensorData();
     }
 }
