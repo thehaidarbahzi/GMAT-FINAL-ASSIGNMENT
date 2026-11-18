@@ -8,6 +8,7 @@
 #include "mpu6050.h"
 #include "e22.h"
 #include "protocol.h"
+#include "bmp280.h"
 
 // MPU6050 Pin configuration
 #define SDA_PIN 21

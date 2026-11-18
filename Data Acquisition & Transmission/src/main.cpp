@@ -10,11 +10,13 @@ E22 lora(
     E22_M1_PIN,
     E22_AUX_PIN
 );
+BMP280 baro;
 
 // Sensor data
 sensors_event_t accel;
 sensors_event_t gyro;
 sensors_event_t temp;
+BMP280Data baroData = {};
 
 // Timing
 unsigned long previousMillis = 0;
@@ -39,12 +41,25 @@ void initializeSensors() {
     } else {
         Serial.println("MPU6050: FAILED");
     }
+
+    if (baro.begin(&Wire)) {
+        Serial.println("BMP280: OK");
+    } else {
+        Serial.println("BMP280: FAILED");
+    }
+
 }
 
 // Read sensor data
 void readSensorData() {
+    // Read MPU6050
     if (imu.isInitialized()) {
         imu.getEvent(&accel, &gyro, &temp);
+    }
+
+    // Read BMP280
+    if (baro.isInitialized()) {
+        baro.readData(&baroData);
     }
 }
 
@@ -92,6 +107,14 @@ void transmitSensorData() {
     payload += String(gyro.gyro.y, 3);
     payload += ",";
     payload += String(gyro.gyro.z, 3);
+    payload += ",";
+    payload += String(temp.temperature, 3);
+    payload += ",";
+    payload += String(baroData.temperature, 3);
+    payload += ",";
+    payload += String(baroData.pressure, 3);
+    payload += ",";
+    payload += String(baroData.altitude, 3);
 
     // Send packet
     if (lora.send(buildPacket(payload))) {
