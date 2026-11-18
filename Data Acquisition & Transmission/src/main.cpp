@@ -57,6 +57,20 @@ void readSensorData() {
         imu.getEvent(&accel, &gyro, &temp);
     }
 
+    // coordinate transformation due to module placement
+    // MPU6050 mounting rotation: -90 degrees around X-axis
+
+    // Accelerometer
+    float temp_axis;
+    temp_axis = accel.acceleration.y;
+    accel.acceleration.y = -accel.acceleration.z;
+    accel.acceleration.z = temp_axis;
+    // Gyroscope
+    temp_axis = gyro.gyro.y;
+    gyro.gyro.y = -gyro.gyro.z;
+    gyro.gyro.z = temp_axis;
+
+
     // Read BMP280
     if (baro.isInitialized()) {
         baro.readData(&baroData);
@@ -130,7 +144,7 @@ void transmitSensorData() {
 void setup() {
     initializeSerial();
     initializeSensors();
-    initializeLoRa();
+    // initializeLoRa();
 }
 
 // Main loop
@@ -141,6 +155,29 @@ void loop() {
         previousMillis = currentMillis;
 
         readSensorData();
-        transmitSensorData();
+        // transmitSensorData();
+        Serial.print(id++);
+    Serial.print(",");
+    Serial.print(millis());
+    Serial.print(",");
+    Serial.print(accel.acceleration.x);
+    Serial.print(",");
+    Serial.print(accel.acceleration.y);
+    Serial.print(",");
+    Serial.print(accel.acceleration.z);
+    Serial.print(",");
+    Serial.print(gyro.gyro.x);
+    Serial.print(",");
+    Serial.print(gyro.gyro.y);
+    Serial.print(",");
+    Serial.print(gyro.gyro.z);
+    Serial.print(",");
+    Serial.print(temp.temperature);
+    Serial.print(",");
+    Serial.print(baroData.temperature);
+    Serial.print(",");
+    Serial.print(baroData.pressure);
+    Serial.print(",");
+    Serial.println(baroData.altitude);
     }
 }
