@@ -36,8 +36,11 @@
 
 // Timing configuration
 #define SERIAL_BAUDRATE 115200
-#define TRANSMIT_INTERVAL 1000
+#define TRANSMIT_INTERVAL 300
 #define SENSOR_READ_INTERVAL 100
+
+// Constant
+constexpr float GRAVITY = 9.80665f;
 
 // Global objects
 extern MPU6050 imu;
@@ -59,5 +62,8 @@ void initializeLoRa();
 void transmitSensorData();
 void transformIMU(sensors_event_t &accel, sensors_event_t &gyro);
 void readSensorDataAccumulated();
+void printSensorData();
+void resetAccumulator();
+void calculateAverage();
 
 #endif

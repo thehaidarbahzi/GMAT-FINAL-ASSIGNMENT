@@ -22,7 +22,7 @@ BMP280Data baroData = {};
 unsigned long previousMillis = 0;
 unsigned long packetID = 0;
 uint32_t readCount = 0;
-uint32_t samplePerBatch = TRANSMIT_INTERVAL / SENSOR_READ_INTERVAL;
+uint32_t batchPeriod = TRANSMIT_INTERVAL / SENSOR_READ_INTERVAL;
 boolean blinkState = true;
 
 // Initialize serial communication
@@ -122,6 +122,65 @@ void initializeLoRa() {
     }
 }
 
+// Transmit sensor data
+void transmitSensorData() {
+    // Skip if the module is still sending the previous packet
+    if (!lora.isReady()) {
+        Serial.println("LoRa: Module busy");
+        return;
+    }
+
+    // Construct payload
+    String payload = "";
+
+    payload += String(packetID);
+    payload += ",";
+    payload += String(millis());
+    payload += ",";
+    payload += String(accel.acceleration.x / GRAVITY, 3);
+    payload += ",";
+    payload += String(accel.acceleration.y / GRAVITY, 3);
+    payload += ",";
+    payload += String(accel.acceleration.z / GRAVITY, 3);
+    payload += ",";
+    payload += String(gyro.gyro.x , 3);
+    payload += ",";
+    payload += String(gyro.gyro.y, 3);
+    payload += ",";
+    payload += String(gyro.gyro.z, 3);
+    payload += ",";
+    payload += String(temp.temperature, 3);
+    payload += ",";
+    payload += String(baroData.temperature, 3);
+    payload += ",";
+    payload += String(baroData.pressure, 3);
+    payload += ",";
+    payload += String(baroData.altitude, 3);
+
+    // Send packet
+    if (lora.send(buildPacket(payload))) {
+        Serial.print("LoRa: Data sent ");
+        Serial.println(payload);
+    } else {
+        Serial.println("LoRa: Transmission failed");
+    }
+}
+
+// Coordinate transformation due to module placement
+void transformIMU(sensors_event_t &accel,sensors_event_t &gyro) {
+    float temp_axis;
+
+    // Accelerometer
+    temp_axis = accel.acceleration.y;
+    accel.acceleration.y = -accel.acceleration.z;
+    accel.acceleration.z = temp_axis;
+
+    // Gyroscope
+    temp_axis = gyro.gyro.y;
+    gyro.gyro.y = -gyro.gyro.z;
+    gyro.gyro.z = temp_axis;
+}
+
 void readSensorDataAccumulated() {
     sensors_event_t sampleAccel = {};
     sensors_event_t sampleGyro = {};
@@ -162,76 +221,17 @@ void readSensorDataAccumulated() {
     }
 }
 
-// Transmit sensor data
-void transmitSensorData() {
-    // Skip if the module is still sending the previous packet
-    if (!lora.isReady()) {
-        Serial.println("LoRa: Module busy");
-        return;
-    }
-
-    // Construct payload
-    String payload = "";
-
-    payload += String(packetID);
-    payload += ",";
-    payload += String(millis());
-    payload += ",";
-    payload += String(accel.acceleration.x, 3);
-    payload += ",";
-    payload += String(accel.acceleration.y, 3);
-    payload += ",";
-    payload += String(accel.acceleration.z, 3);
-    payload += ",";
-    payload += String(gyro.gyro.x, 3);
-    payload += ",";
-    payload += String(gyro.gyro.y, 3);
-    payload += ",";
-    payload += String(gyro.gyro.z, 3);
-    payload += ",";
-    payload += String(temp.temperature, 3);
-    payload += ",";
-    payload += String(baroData.temperature, 3);
-    payload += ",";
-    payload += String(baroData.pressure, 3);
-    payload += ",";
-    payload += String(baroData.altitude, 3);
-
-    // Send packet
-    if (lora.send(buildPacket(payload))) {
-        Serial.print("LoRa: Data sent ");
-        Serial.println(payload);
-    } else {
-        Serial.println("LoRa: Transmission failed");
-    }
-}
-
-// Coordinate transformation due to module placement
-void transformIMU(sensors_event_t &accel,sensors_event_t &gyro) {
-    float temp_axis;
-
-    // Accelerometer
-    temp_axis = accel.acceleration.y;
-    accel.acceleration.y = -accel.acceleration.z;
-    accel.acceleration.z = temp_axis;
-
-    // Gyroscope
-    temp_axis = gyro.gyro.y;
-    gyro.gyro.y = -gyro.gyro.z;
-    gyro.gyro.z = temp_axis;
-}
-
 void printSensorData() {
     String data = "";
     data += String(packetID);
     data += ",";
     data += String(millis());
     data += ",";
-    data += String(accel.acceleration.x, 3);
+    data += String(accel.acceleration.x / GRAVITY, 3);
     data += ",";
-    data += String(accel.acceleration.y, 3);
+    data += String(accel.acceleration.y / GRAVITY, 3);
     data += ",";
-    data += String(accel.acceleration.z, 3);
+    data += String(accel.acceleration.z / GRAVITY, 3);
     data += ",";
     data += String(gyro.gyro.x, 3);
     data += ",";
@@ -249,8 +249,6 @@ void printSensorData() {
 
     Serial.println(data);
 
-    digitalWrite(TRANSMISSION_INDICATOR_PIN, !blinkState);
-    blinkState = !blinkState;
 }
 
 void resetAccumulator() {
@@ -306,7 +304,7 @@ void loop() {
         readCount++;
 
         // Check transmission interval
-        if (readCount >= samplePerBatch) {
+        if (readCount >= batchPeriod) {
 
             // Calculate average
             calculateAverage();
@@ -314,6 +312,10 @@ void loop() {
             // Print averaged data
             printSensorData();
             // transmitSensorData();
+
+            // Blink indicator
+            digitalWrite(TRANSMISSION_INDICATOR_PIN, !blinkState);
+            blinkState = !blinkState;
 
             // Increment batch ID
             packetID++;
