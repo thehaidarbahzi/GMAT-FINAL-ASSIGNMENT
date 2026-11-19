@@ -13,8 +13,10 @@
     "windows": [
       {
         "title": "gcs",
-        "width": 800,
-        "height": 600
+        "width": 1366,
+        "height": 860,
+        "minWidth": 1024,
+        "minHeight": 680
       }
     ],
     "security": {

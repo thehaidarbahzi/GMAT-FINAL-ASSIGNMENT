@@ -3,12 +3,40 @@ import * as THREE from "three";
 
 type SceneStatus = "preparing" | "ready" | "error";
 
+export type Attitude = {
+  roll: number;
+  pitch: number;
+  yaw: number;
+};
+
 type RocketSceneProps = {
   deployed: boolean;
   altitude: number;
+  attitude?: Attitude | null;
 };
 
 const YAW_LIMIT = 0.9;
+const DEG_TO_RAD = Math.PI / 180;
+
+// Mount frame (X right, Y forward, Z up along the rocket) to three.js (X right, Y up, Z toward camera).
+// Yaw about mount Z = three Y, pitch about mount Y = three -Z, roll about mount X = three X.
+function attitudeQuaternion(attitude: Attitude | null | undefined, out: THREE.Quaternion) {
+  if (
+    !attitude ||
+    !Number.isFinite(attitude.roll) ||
+    !Number.isFinite(attitude.pitch) ||
+    !Number.isFinite(attitude.yaw)
+  ) {
+    return out.identity();
+  }
+  const euler = new THREE.Euler(
+    attitude.roll * DEG_TO_RAD,
+    attitude.yaw * DEG_TO_RAD,
+    -attitude.pitch * DEG_TO_RAD,
+    "YZX",
+  );
+  return out.setFromEuler(euler);
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -25,9 +53,9 @@ function tokenColor(name: string, fallback: string): THREE.Color {
   return new THREE.Color(readToken(name, fallback));
 }
 
-export function RocketScene({ deployed, altitude }: RocketSceneProps) {
+export function RocketScene({ deployed, altitude, attitude }: RocketSceneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const targetRef = useRef({ deployed, altitude });
+  const targetRef = useRef({ deployed, altitude, attitude });
   const yawRef = useRef(0);
   const dragRef = useRef({
     active: false,
@@ -39,8 +67,8 @@ export function RocketScene({ deployed, altitude }: RocketSceneProps) {
   const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
-    targetRef.current = { deployed, altitude };
-  }, [deployed, altitude]);
+    targetRef.current = { deployed, altitude, attitude };
+  }, [deployed, altitude, attitude]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -360,6 +388,7 @@ export function RocketScene({ deployed, altitude }: RocketSceneProps) {
     let currentLookY = 2.7;
     let chuteScale = 0.001;
     let frame = 0;
+    const targetAttitude = new THREE.Quaternion();
 
     const clock = new THREE.Timer();
     clock.connect(document);
@@ -387,6 +416,9 @@ export function RocketScene({ deployed, altitude }: RocketSceneProps) {
         -Math.min(targetRef.current.altitude, 950) * 0.0035;
       world.position.y +=
         (targetWorldY - world.position.y) * smoothing(6);
+
+      attitudeQuaternion(targetRef.current.attitude, targetAttitude);
+      rocket.quaternion.slerp(targetAttitude, smoothing(5));
 
       const targetChute = targetRef.current.deployed ? 1 : 0.001;
       chuteScale += (targetChute - chuteScale) * smoothing(6);
