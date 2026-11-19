@@ -47,9 +47,9 @@ extern MPU6050 imu;
 extern E22 lora;
 
 // Sensor data
-extern sensors_event_t accel;
-extern sensors_event_t gyro;
-extern sensors_event_t temp;
+extern sensors_event_t accel, gyro, temp;
+extern BMP280Data baroData;
+extern float roll, pitch;
 
 // Function prototypes
 void setup();
@@ -65,5 +65,6 @@ void readSensorDataAccumulated();
 void printSensorData();
 void resetAccumulator();
 void calculateAverage();
+void calculateRollPitch(const sensors_event_t &accel, float &roll, float &pitch);
 
 #endif

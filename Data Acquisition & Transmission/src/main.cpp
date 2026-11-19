@@ -13,10 +13,11 @@ E22 lora(
 BMP280 baro;
 
 // Sensor data
-sensors_event_t accel;
-sensors_event_t gyro;
-sensors_event_t temp;
+sensors_event_t accel = {};
+sensors_event_t gyro = {};
+sensors_event_t temp = {};
 BMP280Data baroData = {};
+float roll, pitch;
 
 // Timing
 unsigned long previousMillis = 0;
@@ -56,23 +57,23 @@ void initializeSensors() {
         }
     }
 
-    delay(1000);
-    digitalWrite(BMP_INDICATOR_PIN, HIGH);
-    delay(1000);
-    digitalWrite(BMP_INDICATOR_PIN, LOW);
-    delay(750);
-    if (baro.begin(&Wire)) {
-        Serial.println("BMP280: OK");
-        digitalWrite(BMP_INDICATOR_PIN, HIGH);
-    } else {
-        Serial.println("BMP280: FAILED");
-        while (true) {
-            digitalWrite(BMP_INDICATOR_PIN, HIGH);
-            delay(500);
-            digitalWrite(BMP_INDICATOR_PIN, LOW);
-            delay(500);
-        }
-    }
+    // delay(1000);
+    // digitalWrite(BMP_INDICATOR_PIN, HIGH);
+    // delay(1000);
+    // digitalWrite(BMP_INDICATOR_PIN, LOW);
+    // delay(750);
+    // if (baro.begin(&Wire)) {
+    //     Serial.println("BMP280: OK");
+    //     digitalWrite(BMP_INDICATOR_PIN, HIGH);
+    // } else {
+    //     Serial.println("BMP280: FAILED");
+    //     while (true) {
+    //         digitalWrite(BMP_INDICATOR_PIN, HIGH);
+    //         delay(500);
+    //         digitalWrite(BMP_INDICATOR_PIN, LOW);
+    //         delay(500);
+    //     }
+    // }
 
 }
 
@@ -246,6 +247,10 @@ void printSensorData() {
     data += String(baroData.pressure, 3);
     data += ",";
     data += String(baroData.altitude, 3);
+    data += ",";
+    data += String(roll, 3);
+    data += ",";
+    data += String(pitch, 3);
 
     Serial.println(data);
 
@@ -278,6 +283,17 @@ void calculateAverage() {
     baroData.altitude /= divisor;
 }
 
+void calculateRollPitch(const sensors_event_t &accel, float &roll, float &pitch) {
+    roll = atan2(
+    accel.acceleration.y,
+    accel.acceleration.z
+) * 180.0 / PI;
+    pitch = atan2(
+        -accel.acceleration.x, 
+        sqrt(accel.acceleration.y * accel.acceleration.y + accel.acceleration.z * accel.acceleration.z)
+    ) * 180.0 / PI;
+}
+
 // Setup
 void setup() {
     pinMode(MPU_INDICATOR_PIN, OUTPUT);
@@ -308,6 +324,9 @@ void loop() {
 
             // Calculate average
             calculateAverage();
+
+            // Calculate roll and pitch
+            calculateRollPitch(accel, roll, pitch);
 
             // Print averaged data
             printSensorData();
