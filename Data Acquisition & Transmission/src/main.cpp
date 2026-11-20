@@ -405,17 +405,6 @@ void calculateAverage() {
     baroData.altitude /= divisor;
 }
 
-void calculateRollPitch(const sensors_event_t &accel, float &roll, float &pitch) {
-    roll = atan2(
-    accel.acceleration.y,
-    accel.acceleration.z
-) * 180.0 / PI;
-    pitch = atan2(
-        -accel.acceleration.x, 
-        sqrt(accel.acceleration.y * accel.acceleration.y + accel.acceleration.z * accel.acceleration.z)
-    ) * 180.0 / PI;
-}
-
 // Calibrate initial roll and pitch offset while the rocket is stationary
 void calibrateRollPitch() {
     Serial.println("Calibrating roll and pitch, keep the rocket still");
