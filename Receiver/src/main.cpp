@@ -159,9 +159,6 @@ void processPacket(const uint8_t *data, size_t length) {
 
     if (E22::rssiToDbm(rssiRaw, rssi)) {
         Serial.print(",");
-        Serial.print(rssi);
+        Serial.println(rssi);
     }
-    Serial.println();
-    digitalWrite(RECEIVE_INDICATOR_PIN, !blinkState);
-    blinkState =!blinkState;
 }
