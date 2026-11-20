@@ -19,12 +19,18 @@ sensors_event_t temp = {};
 BMP280Data baroData = {};
 float roll, pitch;
 
-// Timing
+// Timing and Scheduling
 unsigned long previousMillis = 0;
+uint32_t batchPeriod = TRANSMIT_INTERVAL / SENSOR_READ_INTERVAL;
+
+// Packet Management
 unsigned long packetID = 0;
 uint32_t readCount = 0;
-uint32_t batchPeriod = TRANSMIT_INTERVAL / SENSOR_READ_INTERVAL;
-boolean blinkState = true;
+bool batchReady = false;
+
+// Transmission Indicator State
+bool successBlinkState = false;
+bool failedBlinkState = false;
 
 // Initialize serial communication
 void initializeSerial() {
@@ -57,23 +63,23 @@ void initializeSensors() {
         }
     }
 
-    // delay(1000);
-    // digitalWrite(BMP_INDICATOR_PIN, HIGH);
-    // delay(1000);
-    // digitalWrite(BMP_INDICATOR_PIN, LOW);
-    // delay(750);
-    // if (baro.begin(&Wire)) {
-    //     Serial.println("BMP280: OK");
-    //     digitalWrite(BMP_INDICATOR_PIN, HIGH);
-    // } else {
-    //     Serial.println("BMP280: FAILED");
-    //     while (true) {
-    //         digitalWrite(BMP_INDICATOR_PIN, HIGH);
-    //         delay(500);
-    //         digitalWrite(BMP_INDICATOR_PIN, LOW);
-    //         delay(500);
-    //     }
-    // }
+    delay(1000);
+    digitalWrite(BMP_INDICATOR_PIN, HIGH);
+    delay(1000);
+    digitalWrite(BMP_INDICATOR_PIN, LOW);
+    delay(750);
+    if (baro.begin(&Wire)) {
+        Serial.println("BMP280: OK");
+        digitalWrite(BMP_INDICATOR_PIN, HIGH);
+    } else {
+        Serial.println("BMP280: FAILED");
+        while (true) {
+            digitalWrite(BMP_INDICATOR_PIN, HIGH);
+            delay(500);
+            digitalWrite(BMP_INDICATOR_PIN, LOW);
+            delay(500);
+        }
+    }
 
 }
 
@@ -124,11 +130,11 @@ void initializeLoRa() {
 }
 
 // Transmit sensor data
-void transmitSensorData() {
+bool transmitSensorData() {
     // Skip if the module is still sending the previous packet
     if (!lora.isReady()) {
         Serial.println("LoRa: Module busy");
-        return;
+        return false;
     }
 
     // Construct payload
@@ -157,14 +163,28 @@ void transmitSensorData() {
     payload += String(baroData.pressure, 3);
     payload += ",";
     payload += String(baroData.altitude, 3);
+    payload += ",";
+    payload += String(roll, 3);
+    payload += ",";
+    payload += String(pitch, 3);
 
     // Send packet
-    if (lora.send(buildPacket(payload))) {
+    bool transmissionStatus = lora.send(buildPacket(payload));
+
+    successBlinkState = transmissionStatus ? !successBlinkState : false;
+    failedBlinkState  = transmissionStatus ? false : !failedBlinkState;
+
+    digitalWrite(SUCCESS_TRANSMISSION_INDICATOR_PIN, successBlinkState);
+    digitalWrite(FAILED_TRANSMISSION_INDICATOR_PIN, failedBlinkState);
+
+    if (transmissionStatus) {
         Serial.print("LoRa: Data sent ");
         Serial.println(payload);
     } else {
         Serial.println("LoRa: Transmission failed");
     }
+
+    return transmissionStatus;
 }
 
 // Coordinate transformation due to module placement
@@ -172,14 +192,14 @@ void transformIMU(sensors_event_t &accel,sensors_event_t &gyro) {
     float temp_axis;
 
     // Accelerometer
-    temp_axis = accel.acceleration.y;
-    accel.acceleration.y = -accel.acceleration.z;
-    accel.acceleration.z = temp_axis;
+    temp_axis = accel.acceleration.x;
+    accel.acceleration.x = accel.acceleration.z;
+    accel.acceleration.z = -temp_axis;
 
     // Gyroscope
-    temp_axis = gyro.gyro.y;
-    gyro.gyro.y = -gyro.gyro.z;
-    gyro.gyro.z = temp_axis;
+    temp_axis = gyro.gyro.x;
+    gyro.gyro.x = gyro.gyro.z;
+    gyro.gyro.z = -temp_axis;
 }
 
 void readSensorDataAccumulated() {
@@ -299,18 +319,20 @@ void setup() {
     pinMode(MPU_INDICATOR_PIN, OUTPUT);
     pinMode(BMP_INDICATOR_PIN, OUTPUT);
     pinMode(LORA_INDICATOR_PIN, OUTPUT);
-    pinMode(TRANSMISSION_INDICATOR_PIN, OUTPUT);
+    pinMode(SUCCESS_TRANSMISSION_INDICATOR_PIN, OUTPUT);
+    pinMode(FAILED_TRANSMISSION_INDICATOR_PIN, OUTPUT);
 
     initializeSerial();
     initializeSensors();
-    // initializeLoRa();
+    initializeLoRa();
 }
 
 // Main loop
 void loop() {
     unsigned long currentMillis = millis();
 
-    if (currentMillis - previousMillis >= SENSOR_READ_INTERVAL) {
+    if (!batchReady && currentMillis - previousMillis >= SENSOR_READ_INTERVAL) {
+
         previousMillis = currentMillis;
 
         // Acquire sensor data
@@ -325,22 +347,28 @@ void loop() {
             // Calculate average
             calculateAverage();
 
-            // Calculate roll and pitch
-            calculateRollPitch(accel, roll, pitch);
-
             // Print averaged data
-            printSensorData();
-            // transmitSensorData();
+            // printSensorData();
+            
+            batchReady = true;
+        }
+    }
+    
+    // Transmit data when LoRa is ready
+    if (batchReady && lora.isReady()) {
+        
+        // Calculate roll and pitch
+        calculateRollPitch(accel, roll, pitch);
 
-            // Blink indicator
-            digitalWrite(TRANSMISSION_INDICATOR_PIN, !blinkState);
-            blinkState = !blinkState;
+        if (transmitSensorData()) {
 
             // Increment batch ID
             packetID++;
 
             // Reset accumulator
             resetAccumulator();
+
+            batchReady = false;
         }
     }
 }
