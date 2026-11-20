@@ -10,6 +10,8 @@
 #include "protocol.h"
 #include "bmp280.h"
 
+enum LedStatus { LED_OFF, LED_SUCCESS, LED_FAILED };
+
 // Function prototypes
 void setup();
 void loop();
@@ -25,5 +27,7 @@ void printSensorData();
 void resetAccumulator();
 void calculateAverage();
 void calculateRollPitch(const sensors_event_t &accel, float &roll, float &pitch);
+void setStatusLed(LedStatus status);
+void updateStatusLed();
 
 #endif
