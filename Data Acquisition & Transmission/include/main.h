@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include <Wire.h>
+#include <math.h>
 
 // Custom libraries
 #include "mpu6050.h"
@@ -29,5 +30,7 @@ void calculateAverage();
 void calculateRollPitch(const sensors_event_t &accel, float &roll, float &pitch);
 void setStatusLed(LedStatus status);
 void updateStatusLed();
+void calibrateRollPitch();
+void calculateRollPitch();
 
 #endif

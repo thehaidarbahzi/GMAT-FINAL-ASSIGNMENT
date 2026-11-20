@@ -22,9 +22,9 @@ bool BMP280::begin(TwoWire *wire) {
     setSampling(
         Adafruit_BMP280::MODE_NORMAL,
         Adafruit_BMP280::SAMPLING_X2,
-        Adafruit_BMP280::SAMPLING_X16,
-        Adafruit_BMP280::FILTER_X16,
-        Adafruit_BMP280::STANDBY_MS_125
+        Adafruit_BMP280::SAMPLING_X4,
+        Adafruit_BMP280::FILTER_X2,
+        Adafruit_BMP280::STANDBY_MS_1
     );
     
     return true;

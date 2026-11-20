@@ -20,6 +20,14 @@
 
 #define IGNITER_PIN 25
 
+// Calibration configuration
+#define CALIBRATION_SAMPLES 200
+#define CALIBRATION_INTERVAL 10
+
+// Roll and pitch offset
+float rollOffset = 0.0f;
+float pitchOffset = 0.0f;
+
 // Transmission Indicator State
 LedStatus transmissionIndicator = LED_OFF;
 
@@ -43,6 +51,9 @@ bool failedBlinkState = false;
 
 // Constant
 constexpr float GRAVITY = 9.80665f;
+const float ALPHA = 0.98;
+float filtRoll = 0, filtPitch = 0;
+unsigned long lastTime = 0;
 
 // Global objects
 MPU6050 imu;
@@ -405,6 +416,47 @@ void calculateRollPitch(const sensors_event_t &accel, float &roll, float &pitch)
     ) * 180.0 / PI;
 }
 
+// Calibrate initial roll and pitch offset while the rocket is stationary
+void calibrateRollPitch() {
+    Serial.println("Calibrating roll and pitch, keep the rocket still");
+
+    sensors_event_t sampleAccel = {};
+    sensors_event_t sampleGyro = {};
+    sensors_event_t sampleTemperature = {};
+    sensors_event_t averageAccel = {};
+
+    float sumX = 0.0f;
+    float sumY = 0.0f;
+    float sumZ = 0.0f;
+
+    for (int i = 0; i < CALIBRATION_SAMPLES; i++) {
+        imu.getEvent(&sampleAccel, &sampleGyro, &sampleTemperature);
+
+        // Transform sensor coordinate frame to mount coordinate frame
+        transformIMU(sampleAccel, sampleGyro);
+
+        sumX += sampleAccel.acceleration.x;
+        sumY += sampleAccel.acceleration.y;
+        sumZ += sampleAccel.acceleration.z;
+
+        delay(CALIBRATION_INTERVAL);
+    }
+
+    // Average accelerometer
+    averageAccel.acceleration.x = sumX / CALIBRATION_SAMPLES;
+    averageAccel.acceleration.y = sumY / CALIBRATION_SAMPLES;
+    averageAccel.acceleration.z = sumZ / CALIBRATION_SAMPLES;
+
+    // Store initial angle as offset
+    calculateRollPitch(averageAccel, rollOffset, pitchOffset);
+
+    Serial.print("Calibration: OK (roll offset ");
+    Serial.print(rollOffset, 3);
+    Serial.print(", pitch offset ");
+    Serial.print(pitchOffset, 3);
+    Serial.println(")");
+}
+
 // Setup
 void setup() {
     pinMode(MPU_INDICATOR_PIN, OUTPUT);
@@ -416,7 +468,26 @@ void setup() {
     initializeSerial();
     initializeSensors();
     initializeLoRa();
+    calibrateRollPitch();
 }
+
+void calculateRollPitch(const sensors_event_t &accel, const sensors_event_t &gyro, float &roll, float &pitch) {
+    float accRoll = atan2(accel.acceleration.y, accel.acceleration.z) * 180.0 / PI;
+    float accPitch = atan2(-accel.acceleration.x,
+                     sqrt(accel.acceleration.y * accel.acceleration.y +
+                          accel.acceleration.z * accel.acceleration.z)) * 180.0 / PI;
+
+    unsigned long now = micros();
+    float dt = (now - lastTime) / 1000000.0;
+    lastTime = now;
+
+    filtRoll  = ALPHA * (filtRoll  + gyro.gyro.x * 180.0 / PI * dt) + (1 - ALPHA) * accRoll;
+    filtPitch = ALPHA * (filtPitch + gyro.gyro.y * 180.0 / PI * dt) + (1 - ALPHA) * accPitch;
+
+    roll = filtRoll;
+    pitch = filtPitch;
+}
+
 
 // Main loop
 void loop() {
@@ -458,6 +529,14 @@ void loop() {
 
         // Calculate roll and pitch
         calculateRollPitch(accel, roll, pitch);
+
+        // Apply calibration offset
+        roll -= rollOffset;
+        pitch -= pitchOffset;
+
+        // Keep roll within -180 to 180
+        if (roll > 180.0f) roll -= 360.0f;
+        else if (roll < -180.0f) roll += 360.0f;
 
         if (transmitSensorData()) {
 
