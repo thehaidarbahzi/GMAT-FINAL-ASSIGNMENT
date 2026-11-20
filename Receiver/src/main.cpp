@@ -9,15 +9,13 @@
 
 // LoRa configuration (must match the transmitter)
 #define LORA_CHANNEL 0x19
-#define LORA_AIR_RATE 0x62
-#define LORA_TX_POWER 0x03
+#define LORA_AIR_RATE 0xE4
+#define LORA_TX_POWER 0x01
+#define LORA_UART_BAUD 115200
 
 // Timing configuration
 #define SERIAL_BAUDRATE 115200
 #define PACKET_GAP 40
-
-// LED indicator pin
-#define RECEIVE_INDICATOR_PIN 2
 
 // Global LoRa object
 E22 lora(
@@ -75,7 +73,7 @@ void initializeLoRa() {
     config.airRate = LORA_AIR_RATE;
     config.txPower = LORA_TX_POWER;
 
-    if (lora.begin(9600, config)) {
+    if (lora.begin(LORA_UART_BAUD, config)) {
         Serial.println("LoRa Receiver: OK");
     } else {
         Serial.print("LoRa Receiver: FAILED (");
