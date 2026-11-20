@@ -1,5 +1,22 @@
 #include "main.h"
 
+// E22-400T30D pin configuration
+#define E22_RX_PIN 16
+#define E22_TX_PIN 17
+#define E22_M0_PIN 18
+#define E22_M1_PIN 19
+#define E22_AUX_PIN 23
+
+// LoRa configuration (must match the transmitter)
+#define LORA_CHANNEL 0x19
+#define LORA_AIR_RATE 0xE4
+#define LORA_TX_POWER 0x01
+#define LORA_UART_BAUD 115200
+
+// Timing configuration
+#define SERIAL_BAUDRATE 115200
+#define PACKET_GAP 40
+
 // Global LoRa object
 E22 lora(
     &Serial2,
@@ -21,6 +38,7 @@ static unsigned long lostCount = 0;
 static unsigned long badCount = 0;
 static unsigned long lastId = 0;
 static bool hasLastId = false;
+boolean blinkState = true;
 
 // Setup
 void setup() {
@@ -55,7 +73,7 @@ void initializeLoRa() {
     config.airRate = LORA_AIR_RATE;
     config.txPower = LORA_TX_POWER;
 
-    if (lora.begin(9600, config)) {
+    if (lora.begin(LORA_UART_BAUD, config)) {
         Serial.println("LoRa Receiver: OK");
     } else {
         Serial.print("LoRa Receiver: FAILED (");
@@ -141,7 +159,6 @@ void processPacket(const uint8_t *data, size_t length) {
 
     if (E22::rssiToDbm(rssiRaw, rssi)) {
         Serial.print(",");
-        Serial.print(rssi);
+        Serial.println(rssi);
     }
-    Serial.println();
 }

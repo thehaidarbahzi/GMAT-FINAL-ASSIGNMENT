@@ -1,5 +1,49 @@
 #include "main.h"
 
+// MPU6050 Pin configuration
+#define SDA_PIN 21
+#define SCL_PIN 22
+
+// E22-400T30D pin configuration
+#define E22_RX_PIN 16 // To LoRa TX
+#define E22_TX_PIN 17 // To LoRa RX
+#define E22_M0_PIN 18
+#define E22_M1_PIN 19
+#define E22_AUX_PIN 23
+
+// LED pin configuration
+#define MPU_INDICATOR_PIN 13
+#define BMP_INDICATOR_PIN 14
+#define LORA_INDICATOR_PIN 26
+#define BLUE_LED_PIN 27
+#define RED_LED_PIN 33
+
+#define IGNITER_PIN 25
+
+// Transmission Indicator State
+LedStatus transmissionIndicator = LED_OFF;
+
+// LED timing configuration
+constexpr unsigned long LED_SUCCESS_PULSE_MS = 80;
+constexpr unsigned long LED_FAILED_BLINK_MS = 150;
+
+unsigned long ledEventMillis = 0;
+bool failedBlinkState = false;
+
+// LoRa configuration (must match the receiver)
+#define LORA_CHANNEL 0x19
+#define LORA_AIR_RATE 0xE4
+#define LORA_TX_POWER 0x01
+#define LORA_UART_BAUD 115200
+
+// Timing configuration
+#define SERIAL_BAUDRATE 115200
+#define TRANSMIT_INTERVAL 200
+#define SENSOR_READ_INTERVAL 100
+
+// Constant
+constexpr float GRAVITY = 9.80665f;
+
 // Global objects
 MPU6050 imu;
 E22 lora(
@@ -19,12 +63,19 @@ sensors_event_t temp = {};
 BMP280Data baroData = {};
 float roll, pitch;
 
-// Timing
+// Timing and Scheduling
 unsigned long previousMillis = 0;
+uint32_t batchPeriod = TRANSMIT_INTERVAL / SENSOR_READ_INTERVAL;
+
+// Packet Management
 unsigned long packetID = 0;
 uint32_t readCount = 0;
-uint32_t batchPeriod = TRANSMIT_INTERVAL / SENSOR_READ_INTERVAL;
-boolean blinkState = true;
+bool batchReady = false;
+
+// Transmission Indicator State
+bool blinkState = false;
+
+
 
 // Initialize serial communication
 void initializeSerial() {
@@ -37,6 +88,7 @@ void initializeSerial() {
 // Initialize I2C and sensors
 void initializeSensors() {
     Wire.begin(SDA_PIN, SCL_PIN);
+    Wire.setClock(400000);
 
     Serial.println("Initializing sensors");
 
@@ -47,6 +99,7 @@ void initializeSensors() {
     if (imu.begin(&Wire)) {
         Serial.println("MPU6050: OK");
         digitalWrite(MPU_INDICATOR_PIN, HIGH);
+        delay(1000);
     } else {
         Serial.println("MPU6050: FAILED");
         while (true) {
@@ -57,23 +110,23 @@ void initializeSensors() {
         }
     }
 
-    // delay(1000);
-    // digitalWrite(BMP_INDICATOR_PIN, HIGH);
-    // delay(1000);
-    // digitalWrite(BMP_INDICATOR_PIN, LOW);
-    // delay(750);
-    // if (baro.begin(&Wire)) {
-    //     Serial.println("BMP280: OK");
-    //     digitalWrite(BMP_INDICATOR_PIN, HIGH);
-    // } else {
-    //     Serial.println("BMP280: FAILED");
-    //     while (true) {
-    //         digitalWrite(BMP_INDICATOR_PIN, HIGH);
-    //         delay(500);
-    //         digitalWrite(BMP_INDICATOR_PIN, LOW);
-    //         delay(500);
-    //     }
-    // }
+    digitalWrite(BMP_INDICATOR_PIN, HIGH);
+    delay(1000);
+    digitalWrite(BMP_INDICATOR_PIN, LOW);
+    delay(750);
+    if (baro.begin(&Wire)) {
+        Serial.println("BMP280: OK");
+        digitalWrite(BMP_INDICATOR_PIN, HIGH);
+        delay(1000);
+    } else {
+        Serial.println("BMP280: FAILED");
+        while (true) {
+            digitalWrite(BMP_INDICATOR_PIN, HIGH);
+            delay(500);
+            digitalWrite(BMP_INDICATOR_PIN, LOW);
+            delay(500);
+        }
+    }
 
 }
 
@@ -107,9 +160,10 @@ void initializeLoRa() {
     config.airRate = LORA_AIR_RATE;
     config.txPower = LORA_TX_POWER;
 
-    if (lora.begin(9600, config)) {
+    if (lora.begin(LORA_UART_BAUD, config)) {
         Serial.println("LoRa: OK");
         digitalWrite(LORA_INDICATOR_PIN, HIGH);
+        delay(1000);
     } else {
         Serial.print("LoRa: FAILED (");
         Serial.print(lora.lastError());
@@ -124,11 +178,11 @@ void initializeLoRa() {
 }
 
 // Transmit sensor data
-void transmitSensorData() {
+bool transmitSensorData() {
     // Skip if the module is still sending the previous packet
     if (!lora.isReady()) {
         Serial.println("LoRa: Module busy");
-        return;
+        return false;
     }
 
     // Construct payload
@@ -157,13 +211,70 @@ void transmitSensorData() {
     payload += String(baroData.pressure, 3);
     payload += ",";
     payload += String(baroData.altitude, 3);
+    payload += ",";
+    payload += String(roll, 3);
+    payload += ",";
+    payload += String(pitch, 3);
 
     // Send packet
-    if (lora.send(buildPacket(payload))) {
+    bool transmissionStatus = lora.send(buildPacket(payload));
+
+    if (transmissionStatus) {
         Serial.print("LoRa: Data sent ");
         Serial.println(payload);
+        setStatusLed(LED_SUCCESS);
     } else {
         Serial.println("LoRa: Transmission failed");
+        setStatusLed(LED_FAILED);
+    }
+
+    return transmissionStatus;
+}
+
+// Set LED status
+void setStatusLed(LedStatus status) {
+    // Keep the current blink running if the transmission keeps failing
+    if (status == LED_FAILED && transmissionIndicator == LED_FAILED) {
+        return;
+    }
+
+    transmissionIndicator = status;
+    ledEventMillis = millis();
+    failedBlinkState = true;
+}
+
+// Update LED without blocking
+void updateStatusLed() {
+    unsigned long now = millis();
+
+    switch (transmissionIndicator) {
+        case LED_SUCCESS:
+            // Purple light
+            digitalWrite(RED_LED_PIN, HIGH);
+            digitalWrite(BLUE_LED_PIN, HIGH);
+
+            if (now - ledEventMillis >= LED_SUCCESS_PULSE_MS) {
+                transmissionIndicator = LED_OFF;
+            }
+            break;
+
+        case LED_FAILED:
+            // Red light
+            digitalWrite(BLUE_LED_PIN, LOW);
+
+            if (now - ledEventMillis >= LED_FAILED_BLINK_MS) {
+                ledEventMillis = now;
+                failedBlinkState = !failedBlinkState;
+            }
+            digitalWrite(RED_LED_PIN, failedBlinkState);
+            break;
+
+        case LED_OFF:
+        default:
+            // Both LEDs off
+            digitalWrite(RED_LED_PIN, LOW);
+            digitalWrite(BLUE_LED_PIN, LOW);
+            break;
     }
 }
 
@@ -172,14 +283,14 @@ void transformIMU(sensors_event_t &accel,sensors_event_t &gyro) {
     float temp_axis;
 
     // Accelerometer
-    temp_axis = accel.acceleration.y;
-    accel.acceleration.y = -accel.acceleration.z;
-    accel.acceleration.z = temp_axis;
+    temp_axis = accel.acceleration.x;
+    accel.acceleration.x = accel.acceleration.z;
+    accel.acceleration.z = -temp_axis;
 
     // Gyroscope
-    temp_axis = gyro.gyro.y;
-    gyro.gyro.y = -gyro.gyro.z;
-    gyro.gyro.z = temp_axis;
+    temp_axis = gyro.gyro.x;
+    gyro.gyro.x = gyro.gyro.z;
+    gyro.gyro.z = -temp_axis;
 }
 
 void readSensorDataAccumulated() {
@@ -299,48 +410,64 @@ void setup() {
     pinMode(MPU_INDICATOR_PIN, OUTPUT);
     pinMode(BMP_INDICATOR_PIN, OUTPUT);
     pinMode(LORA_INDICATOR_PIN, OUTPUT);
-    pinMode(TRANSMISSION_INDICATOR_PIN, OUTPUT);
+    pinMode(BLUE_LED_PIN, OUTPUT);
+    pinMode(RED_LED_PIN, OUTPUT);
 
     initializeSerial();
     initializeSensors();
-    // initializeLoRa();
+    initializeLoRa();
 }
 
 // Main loop
 void loop() {
     unsigned long currentMillis = millis();
 
+    // Update transmission indicator
+    updateStatusLed();
+
     if (currentMillis - previousMillis >= SENSOR_READ_INTERVAL) {
-        previousMillis = currentMillis;
 
-        // Acquire sensor data
-        readSensorDataAccumulated();
+        // Keep a fixed schedule to avoid timing drift
+        previousMillis += SENSOR_READ_INTERVAL;
 
-        // Count samples
-        readCount++;
+        // Skip sampling while the batch is waiting to be transmitted
+        if (!batchReady) {
 
-        // Check transmission interval
-        if (readCount >= batchPeriod) {
+            // Acquire sensor data
+            readSensorDataAccumulated();
 
-            // Calculate average
-            calculateAverage();
+            // Count samples
+            readCount++;
 
-            // Calculate roll and pitch
-            calculateRollPitch(accel, roll, pitch);
+            // Check transmission interval
+            if (readCount >= batchPeriod) {
 
-            // Print averaged data
-            printSensorData();
-            // transmitSensorData();
+                // Calculate average
+                calculateAverage();
 
-            // Blink indicator
-            digitalWrite(TRANSMISSION_INDICATOR_PIN, !blinkState);
-            blinkState = !blinkState;
+                // Print averaged data
+                // printSensorData();
+
+                batchReady = true;
+            }
+        }
+    }
+
+    // Transmit data when LoRa is ready
+    if (batchReady && lora.isReady()) {
+
+        // Calculate roll and pitch
+        calculateRollPitch(accel, roll, pitch);
+
+        if (transmitSensorData()) {
 
             // Increment batch ID
             packetID++;
 
             // Reset accumulator
             resetAccumulator();
+
+            batchReady = false;
         }
     }
 }
