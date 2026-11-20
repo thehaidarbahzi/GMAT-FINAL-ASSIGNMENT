@@ -21,6 +21,7 @@ static unsigned long lostCount = 0;
 static unsigned long badCount = 0;
 static unsigned long lastId = 0;
 static bool hasLastId = false;
+boolean blinkState = true;
 
 // Setup
 void setup() {
@@ -144,4 +145,6 @@ void processPacket(const uint8_t *data, size_t length) {
         Serial.print(rssi);
     }
     Serial.println();
+    digitalWrite(RECEIVE_INDICATOR_PIN, !blinkState);
+    blinkState =!blinkState;
 }
