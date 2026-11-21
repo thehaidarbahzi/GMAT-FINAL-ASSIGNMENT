@@ -332,7 +332,6 @@ void readSensorDataAccumulated() {
         // Accumulate temperature
         temp.temperature += sampleTemperature.temperature;
     }
-
     BMP280Data sampleBaroData = {};
 
     if (baro.isInitialized()) {
@@ -405,6 +404,24 @@ void calculateAverage() {
     baroData.altitude /= divisor;
 }
 
+// Calculate roll and pitch using complementary filter
+void calculateRollPitch(const sensors_event_t &accel, const sensors_event_t &gyro, float &roll, float &pitch) {
+    float accRoll = atan2(accel.acceleration.y, accel.acceleration.z) * 180.0 / PI;
+    float accPitch = atan2(-accel.acceleration.x,
+                     sqrt(accel.acceleration.y * accel.acceleration.y +
+                          accel.acceleration.z * accel.acceleration.z)) * 180.0 / PI;
+
+    unsigned long now = micros();
+    float dt = (now - lastTime) / 1000000.0;
+    lastTime = now;
+
+    filtRoll  = ALPHA * (filtRoll  + gyro.gyro.x * 180.0 / PI * dt) + (1 - ALPHA) * accRoll;
+    filtPitch = ALPHA * (filtPitch + gyro.gyro.y * 180.0 / PI * dt) + (1 - ALPHA) * accPitch;
+
+    roll = filtRoll;
+    pitch = filtPitch;
+}
+
 // Calibrate initial roll and pitch offset while the rocket is stationary
 void calibrateRollPitch() {
     Serial.println("Calibrating roll and pitch, keep the rocket still");
@@ -437,7 +454,7 @@ void calibrateRollPitch() {
     averageAccel.acceleration.z = sumZ / CALIBRATION_SAMPLES;
 
     // Store initial angle as offset
-    calculateRollPitch(averageAccel, rollOffset, pitchOffset);
+    calculateAccelRollPitch(averageAccel, rollOffset, pitchOffset);
 
     Serial.print("Calibration: OK (roll offset ");
     Serial.print(rollOffset, 3);
@@ -458,23 +475,11 @@ void setup() {
     initializeSensors();
     initializeLoRa();
     calibrateRollPitch();
-}
 
-void calculateRollPitch(const sensors_event_t &accel, const sensors_event_t &gyro, float &roll, float &pitch) {
-    float accRoll = atan2(accel.acceleration.y, accel.acceleration.z) * 180.0 / PI;
-    float accPitch = atan2(-accel.acceleration.x,
-                     sqrt(accel.acceleration.y * accel.acceleration.y +
-                          accel.acceleration.z * accel.acceleration.z)) * 180.0 / PI;
-
-    unsigned long now = micros();
-    float dt = (now - lastTime) / 1000000.0;
-    lastTime = now;
-
-    filtRoll  = ALPHA * (filtRoll  + gyro.gyro.x * 180.0 / PI * dt) + (1 - ALPHA) * accRoll;
-    filtPitch = ALPHA * (filtPitch + gyro.gyro.y * 180.0 / PI * dt) + (1 - ALPHA) * accPitch;
-
-    roll = filtRoll;
-    pitch = filtPitch;
+    // Start the filter from the calibrated orientation
+    filtRoll = rollOffset;
+    filtPitch = pitchOffset;
+    lastTime = micros();
 }
 
 
@@ -505,6 +510,17 @@ void loop() {
                 // Calculate average
                 calculateAverage();
 
+                // Calculate roll and pitch once per batch
+                calculateRollPitch(accel, gyro, roll, pitch);
+
+                // Apply calibration offset
+                roll -= rollOffset;
+                pitch -= pitchOffset;
+
+                // Keep roll within -180 to 180
+                if (roll > 180.0f) roll -= 360.0f;
+                else if (roll < -180.0f) roll += 360.0f;
+
                 // Print averaged data
                 // printSensorData();
 
@@ -515,17 +531,6 @@ void loop() {
 
     // Transmit data when LoRa is ready
     if (batchReady && lora.isReady()) {
-
-        // Calculate roll and pitch
-        calculateRollPitch(accel, roll, pitch);
-
-        // Apply calibration offset
-        roll -= rollOffset;
-        pitch -= pitchOffset;
-
-        // Keep roll within -180 to 180
-        if (roll > 180.0f) roll -= 360.0f;
-        else if (roll < -180.0f) roll += 360.0f;
 
         if (transmitSensorData()) {
 

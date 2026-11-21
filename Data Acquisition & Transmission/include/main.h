@@ -27,10 +27,9 @@ void readSensorDataAccumulated();
 void printSensorData();
 void resetAccumulator();
 void calculateAverage();
-void calculateRollPitch(const sensors_event_t &accel, float &roll, float &pitch);
 void setStatusLed(LedStatus status);
 void updateStatusLed();
 void calibrateRollPitch();
-void calculateRollPitch();
+void calculateRollPitch(const sensors_event_t &accel, const sensors_event_t &gyro, float &roll, float &pitch);
 
 #endif
