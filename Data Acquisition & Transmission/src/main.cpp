@@ -32,11 +32,10 @@ float pitchOffset = 0.0f;
 LedStatus transmissionIndicator = LED_OFF;
 
 // LED timing configuration
-constexpr unsigned long LED_SUCCESS_PULSE_MS = 80;
-constexpr unsigned long LED_FAILED_BLINK_MS = 150;
+constexpr unsigned long LED_BLINK_INTERVAL_MS = 150;
 
 unsigned long ledEventMillis = 0;
-bool failedBlinkState = false;
+bool blinkState = false;
 
 // LoRa configuration (must match the receiver)
 #define LORA_CHANNEL 0x19
@@ -82,9 +81,6 @@ uint32_t batchPeriod = TRANSMIT_INTERVAL / SENSOR_READ_INTERVAL;
 unsigned long packetID = 0;
 uint32_t readCount = 0;
 bool batchReady = false;
-
-// Transmission Indicator State
-bool blinkState = false;
 
 
 
@@ -244,14 +240,14 @@ bool transmitSensorData() {
 
 // Set LED status
 void setStatusLed(LedStatus status) {
-    // Keep the current blink running if the transmission keeps failing
-    if (status == LED_FAILED && transmissionIndicator == LED_FAILED) {
+    // Keep the current blink running if the status remains unchanged
+    if (status == transmissionIndicator) {
         return;
     }
 
     transmissionIndicator = status;
     ledEventMillis = millis();
-    failedBlinkState = true;
+    blinkState = true;
 }
 
 // Update LED without blocking
@@ -259,30 +255,29 @@ void updateStatusLed() {
     unsigned long now = millis();
 
     switch (transmissionIndicator) {
+
         case LED_SUCCESS:
-            // Purple light
-            digitalWrite(RED_LED_PIN, HIGH);
-            digitalWrite(BLUE_LED_PIN, HIGH);
-
-            if (now - ledEventMillis >= LED_SUCCESS_PULSE_MS) {
-                transmissionIndicator = LED_OFF;
-            }
-            break;
-
         case LED_FAILED:
-            // Red light
-            digitalWrite(BLUE_LED_PIN, LOW);
 
-            if (now - ledEventMillis >= LED_FAILED_BLINK_MS) {
+            if (now - ledEventMillis >= LED_BLINK_INTERVAL_MS) {
                 ledEventMillis = now;
-                failedBlinkState = !failedBlinkState;
+                blinkState = !blinkState;
             }
-            digitalWrite(RED_LED_PIN, failedBlinkState);
+
+            if (transmissionIndicator == LED_SUCCESS) {
+                // Purple
+                digitalWrite(RED_LED_PIN, blinkState);
+                digitalWrite(BLUE_LED_PIN, blinkState);
+            } else {
+                // Red
+                digitalWrite(BLUE_LED_PIN, LOW);
+                digitalWrite(RED_LED_PIN, blinkState);
+            }
+
             break;
 
         case LED_OFF:
         default:
-            // Both LEDs off
             digitalWrite(RED_LED_PIN, LOW);
             digitalWrite(BLUE_LED_PIN, LOW);
             break;
